@@ -77,10 +77,23 @@ const els = {
   totalCount: $("totalCount"), rateCount: $("rateCount"),
   statuschip: $("statuschip"), statusword: $("statusword"),
   pollReadout: $("pollReadout"), limitReadout: $("limitReadout"),
-  watchSummary: $("watchSummary"),
+  watchSummary: $("watchSummary"), watchBox: $("watchBox"),
   targetInput: $("targetInput"), tokenInput: $("tokenInput"),
   pauseBtn: $("pauseBtn"), scope: $("scope"),
+  revReadout: $("revReadout"),
+  updateChip: $("updateChip"), updateWord: $("updateWord"),
+  updateDialog: $("updateDialog"), updateSummary: $("updateSummary"),
+  updateSubjects: $("updateSubjects"), updateNow: $("updateNow"),
+  updateLater: $("updateLater"),
 };
+
+/* Running inside the Tauri shell? Then links open in the system browser and
+ * the updater can actually run; in a plain browser both fall away. */
+const IS_APP = !!window.__TAURI__;
+const BUILT_COMMIT =
+  typeof window.__LW_COMMIT === "string" && /^[0-9a-f]{40}$/.test(window.__LW_COMMIT)
+    ? window.__LW_COMMIT
+    : null;
 
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -455,11 +468,13 @@ function buildLedger() {
 }
 
 function renderBoards() {
-  renderBoard(els.hotRepos, state.repoTally, 7, name => `https://github.com/${name}`);
-  renderBoard(els.hotActors, state.actorTally, 5, name => `https://github.com/${name}`, true);
+  // Bots aren't watchable users, so they get no quick-add button.
+  const unlessBot = name => (name.endsWith("[bot]") ? null : name);
+  renderBoard(els.hotRepos, state.repoTally, 7, { meter: true, tokenFor: name => name });
+  renderBoard(els.hotActors, state.actorTally, 5, { meter: false, tokenFor: unlessBot });
 }
 
-function renderBoard(root, tally, n, hrefFor, plain = false) {
+function renderBoard(root, tally, n, opts) {
   const top = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
   root.replaceChildren();
   if (top.length === 0) {
@@ -469,13 +484,14 @@ function renderBoard(root, tally, n, hrefFor, plain = false) {
     root.append(li);
     return;
   }
+  const watched = new Set(getTokens().map(t => t.toLowerCase()));
   const max = top[0][1];
   for (const [name, count] of top) {
     const li = document.createElement("li");
     li.className = "boardrow";
     const a = document.createElement("a");
     a.className = "boardrow-name";
-    a.href = hrefFor(name);
+    a.href = `https://github.com/${name}`;
     a.target = "_blank";
     a.rel = "noopener";
     a.textContent = name;
@@ -483,7 +499,17 @@ function renderBoard(root, tally, n, hrefFor, plain = false) {
     c.className = "boardrow-count";
     c.textContent = count;
     li.append(a, c);
-    if (!plain) {
+    const token = opts.tokenFor(name);
+    if (token && !watched.has(token.toLowerCase())) {
+      const add = document.createElement("button");
+      add.className = "boardrow-add";
+      add.type = "button";
+      add.textContent = "+";
+      add.title = `watch ${token}`;
+      add.addEventListener("click", () => addWatch(token));
+      li.append(add);
+    }
+    if (opts.meter) {
       const meter = document.createElement("span");
       meter.className = "boardrow-meter";
       const fill = document.createElement("i");
@@ -636,29 +662,85 @@ function scopePulse(channel) { scope.pulse(channel); }
 
 /* ── controls ──────────────────────────────────────────────────────── */
 
-function retune() {
-  for (const t of state.targets) clearTimeout(t.timer);
-  state.targets = parseTargets(state.raw);
-  state.buffer.length = 0;
-  state.firstBatch = true;
-  els.wire.replaceChildren();
-  els.wireEmpty.hidden = false;
-  els.wireEmpty.classList.remove("is-error");
-  updateWatchSummary();
+/* The watch list is a set of tokens ("torvalds", "rust-lang/rust",
+ * "org:nasa", "global") shown as chips. Changing it is incremental: targets
+ * already on the air keep their ETags and timers, the wire is never wiped
+ * just because one station was added or dropped. */
 
-  if (state.targets.length === 0) {
+function getTokens() {
+  return state.raw.trim() ? state.raw.trim().split(/[,\s]+/).filter(Boolean) : [];
+}
+
+function setTokens(tokens) {
+  const seen = new Set();
+  const clean = [];
+  for (const t of tokens) {
+    const k = t.toLowerCase();
+    if (!seen.has(k)) { seen.add(k); clean.push(t); }
+  }
+  state.raw = clean.join(" ");
+  localStorage.setItem("lw-target", state.raw);
+  applyWatch();
+}
+
+function addWatch(token) { setTokens([...getTokens(), token]); }
+function removeWatch(token) { setTokens(getTokens().filter(t => t !== token)); }
+
+function renderWatchChips() {
+  for (const c of els.watchBox.querySelectorAll(".watchchip")) c.remove();
+  const tokens = getTokens();
+  for (const token of tokens) {
+    const chip = document.createElement("span");
+    chip.className = "watchchip";
+    const name = document.createElement("span");
+    name.textContent = token;
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "watchchip-x";
+    x.textContent = "×";
+    x.title = `stop watching ${token}`;
+    x.addEventListener("click", ev => { ev.preventDefault(); removeWatch(token); });
+    chip.append(name, x);
+    els.watchBox.insertBefore(chip, els.targetInput);
+  }
+  els.targetInput.placeholder = tokens.length ? "add…" : "user · owner/repo · org:name · global";
+}
+
+function applyWatch() {
+  const parsed = parseTargets(state.raw);
+  const prev = new Map(state.targets.map(t => [t.path, t]));
+  const next = parsed.map(p => prev.get(p.path) || p);
+  for (const t of state.targets) {
+    if (!next.some(n => n.path === t.path)) clearTimeout(t.timer);
+  }
+  const added = next.filter(t => !prev.has(t.path));
+  state.targets = next;
+  renderWatchChips();
+  updateWatchSummary();
+  renderBoards();
+
+  if (liveTargets().length === 0) {
     setStatus("idle", "idle");
+    state.buffer.length = 0;
+    els.wire.replaceChildren();
+    els.wireEmpty.hidden = false;
+    els.wireEmpty.classList.remove("is-error");
     els.wireEmpty.children[0].textContent = "not watching anything yet";
-    els.wireEmpty.children[1].textContent = "type who to watch below — a user, owner/repo, org:name, or global";
+    els.wireEmpty.children[1].textContent = "add who to watch below — a user, owner/repo, org:name, or global";
     return;
   }
 
-  els.wireEmpty.children[0].textContent = state.targets.length === 1
-    ? `tuning in to ${state.targets[0].label}…`
-    : `tuning in to ${state.targets.length} stations…`;
-  els.wireEmpty.children[1].textContent = "first events land after the opening poll";
+  if (els.wire.children.length === 0) {
+    state.firstBatch = true;
+    els.wireEmpty.hidden = false;
+    els.wireEmpty.classList.remove("is-error");
+    els.wireEmpty.children[0].textContent = next.length === 1
+      ? `tuning in to ${next[0].label}…`
+      : `tuning in to ${next.length} stations…`;
+    els.wireEmpty.children[1].textContent = "first events land after the opening poll";
+  }
   // Stagger the opening polls so a long watch list doesn't burst.
-  state.targets.forEach((t, i) => scheduleTarget(t, 300 + i * 1200));
+  added.forEach((t, i) => scheduleTarget(t, 300 + i * 1200));
 }
 
 // A ?watch= URL parameter overrides the saved list for this visit only,
@@ -666,18 +748,36 @@ function retune() {
 const urlWatch = new URLSearchParams(location.search).get("watch");
 if (urlWatch !== null) state.raw = urlWatch;
 
-els.targetInput.value = state.raw;
+els.targetInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" || e.key === "," || e.key === " ") {
+    const v = els.targetInput.value.trim().replace(/,+$/, "");
+    if (v) {
+      e.preventDefault();
+      els.targetInput.value = "";
+      addWatch(v);
+    } else if (e.key !== " ") {
+      e.preventDefault();
+    }
+  } else if (e.key === "Backspace" && !els.targetInput.value) {
+    const tokens = getTokens();
+    if (tokens.length) removeWatch(tokens[tokens.length - 1]);
+  }
+});
+
 els.targetInput.addEventListener("change", () => {
-  state.raw = els.targetInput.value;
-  localStorage.setItem("lw-target", state.raw);
-  retune();
+  const v = els.targetInput.value.trim();
+  if (v) {
+    els.targetInput.value = "";
+    addWatch(v);
+  }
 });
 
 els.tokenInput.value = state.token;
 els.tokenInput.addEventListener("change", () => {
   state.token = els.tokenInput.value.trim();
   localStorage.setItem("lw-token", state.token);
-  retune();
+  // A token changes the polling budget — bring every station's next poll in.
+  liveTargets().forEach((t, i) => scheduleTarget(t, 500 + i * 600));
 });
 
 function setPaused(on) {
@@ -698,9 +798,73 @@ addEventListener("keydown", e => {
   }
 });
 
+/* ── the tauri shell: system-browser links + the updater ───────────── */
+
+if (IS_APP) {
+  // Inside the webview, links leave through the system browser.
+  document.addEventListener("click", e => {
+    const a = e.target.closest("a");
+    if (!a || !/^https?:/.test(a.href)) return;
+    e.preventDefault();
+    window.__TAURI__.core.invoke("open_external", { url: a.href })
+      .catch(() => window.open(a.href));
+  });
+}
+
+/* Same contract as agenttilecli's updater: the binary knows the commit it
+ * was built from, asks how far origin/main has moved on, and offers the
+ * pull-and-reinstall script. The web build has no baked commit and Pages
+ * always serves main, so none of this runs in a plain browser. */
+const SELF_REPO = "pl0xuee/github-livewire";
+
+async function checkForUpdate() {
+  if (!IS_APP || !BUILT_COMMIT) return;
+  let d;
+  try {
+    const headers = { Accept: "application/vnd.github+json" };
+    if (state.token) headers.Authorization = `Bearer ${state.token}`;
+    const res = await fetch(`${API}/repos/${SELF_REPO}/compare/${BUILT_COMMIT}...main`, { headers });
+    if (!res.ok) return;
+    d = await res.json();
+  } catch { return; }
+  if (d.status !== "ahead" || !d.ahead_by) return;
+
+  const n = d.ahead_by;
+  els.updateWord.textContent = `update · ${n}`;
+  els.updateChip.hidden = false;
+  els.updateSummary.textContent =
+    `this build is ${n} commit${n === 1 ? "" : "s"} behind origin/main`;
+  els.updateSubjects.replaceChildren();
+  for (const c of (d.commits || []).slice(-6).reverse()) {
+    const li = document.createElement("li");
+    li.textContent = (c.commit?.message || "").split("\n")[0];
+    els.updateSubjects.append(li);
+  }
+}
+
+els.updateChip.addEventListener("click", () => els.updateDialog.showModal());
+els.updateLater.addEventListener("click", () => els.updateDialog.close());
+els.updateNow.addEventListener("click", () => {
+  els.updateNow.disabled = true;
+  window.__TAURI__.core.invoke("run_update")
+    .then(() => {
+      els.updateSummary.textContent =
+        "updating — livewire rebuilds and restarts itself when it's done";
+      els.updateSubjects.replaceChildren();
+    })
+    .catch(() => {
+      els.updateNow.disabled = false;
+      els.updateSummary.textContent =
+        "couldn't start the updater — run livewire-update.sh from the repo";
+    });
+});
+
+if (BUILT_COMMIT) els.revReadout.textContent = `rev ${BUILT_COMMIT.slice(0, 7)}`;
+setTimeout(checkForUpdate, 8000);
+setInterval(checkForUpdate, 6 * 3600 * 1000);
+
 /* ── go ────────────────────────────────────────────────────────────── */
 
 buildLedger();
-renderBoards();
 scope.start();
-retune();
+applyWatch();

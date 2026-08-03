@@ -1,0 +1,17 @@
+[package]
+name = "livewire"
+version = "0.2.0"
+description = "Live telemetry board for GitHub's public event stream"
+license = "MIT"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

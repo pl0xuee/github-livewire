@@ -15,6 +15,11 @@
     <p class="engraving">github telemetry</p>
   </div>
   <canvas id="scope" class="scope" aria-hidden="true"></canvas>
+  <button id="updateChip" class="updatechip" type="button" hidden
+          title="A newer livewire is on origin/main">
+    <span class="lamp" aria-hidden="true"></span>
+    <span id="updateWord">update</span>
+  </button>
   <div class="statuschip" id="statuschip" data-state="sync">
     <span class="lamp" aria-hidden="true"></span>
     <span class="statuschip-word" id="statusword">tuning</span>
@@ -51,10 +56,13 @@
 </main>
 
 <footer class="deskbar">
-  <label class="deskfield">
+  <label class="deskfield deskfield--watch">
     <span class="engraving">watch</span>
-    <input id="targetInput" type="text" spellcheck="false" autocomplete="off"
-           placeholder="torvalds gaearon rust-lang/rust" title="Who to watch — users, owner/repo, org:name, or global, separated by spaces or commas. Empty = off.">
+    <div class="watchbox" id="watchBox">
+      <input id="targetInput" type="text" spellcheck="false" autocomplete="off"
+             placeholder="user · owner/repo · org:name · global"
+             title="Type who to watch and press Enter — users, owner/repo, org:name, or global. Each becomes a chip; × removes it.">
+    </div>
   </label>
   <label class="deskfield">
     <span class="engraving">token</span>
@@ -65,8 +73,19 @@
   <div class="desktelemetry">
     <span id="pollReadout" class="engraving">next poll —</span>
     <span id="limitReadout" class="engraving">api —</span>
+    <span id="revReadout" class="engraving"></span>
   </div>
 </footer>
+
+<dialog id="updateDialog" class="updatedialog">
+  <h2 class="engraving">update ready</h2>
+  <p id="updateSummary"></p>
+  <ul id="updateSubjects"></ul>
+  <div class="updatedialog-actions">
+    <button id="updateNow" class="deskbtn deskbtn--primary" type="button">update now</button>
+    <button id="updateLater" class="deskbtn" type="button">later</button>
+  </div>
+</dialog>
 
 <script src="app.js"></script>
 </body>

@@ -21,9 +21,11 @@ releases, pull requests, issues and more, streaming in as they happen.
 - **Watch anything, or nothing** — livewire starts idle and polls nothing
   until you tell it who to watch: users (`torvalds`), repos
   (`rust-lang/rust`), orgs (`org:mozilla`), or `global` for the public
-  firehose. List several separated by spaces or commas — each target gets its
-  own poll loop and they merge onto one wire, deduplicated. A watch list is
-  shareable as a link: `?watch=torvalds,rust-lang/rust`.
+  firehose. Type a handle and press Enter — it pins as a chip; × unpins it.
+  Every leaderboard row also grows a **+** on hover that adds it to the
+  watch. Each target gets its own poll loop and they merge onto one wire,
+  deduplicated. A watch list is shareable as a link:
+  `?watch=torvalds,rust-lang/rust`.
 - Pause with the button or the space bar. Session totals and events/min in the
   ledger footer; API budget and next-poll countdown in the desk bar.
 
@@ -38,6 +40,22 @@ python -m http.server 8080
 ```
 
 then open <http://localhost:8080>.
+
+## The desktop app
+
+`src-tauri/` wraps the same three files in a Tauri shell — a native window,
+a few megabytes, no bundled browser. Build and install it into your launcher
+with:
+
+```sh
+./install.sh
+```
+
+(needs Rust and `webkit2gtk-4.1`). The build stamps the commit it was made
+from into the page; the app periodically asks GitHub how far `origin/main`
+has moved on and, when it has, lights a green **update** chip in the header —
+click it to see what's new and update in place (`livewire-update.sh` pulls,
+rebuilds, reinstalls, and restarts). Links open in your system browser.
 
 ## Rate limits
 
