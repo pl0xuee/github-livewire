@@ -50,14 +50,14 @@ const TYPE_TO_CHANNEL = {
 
 /* ── state ─────────────────────────────────────────────────────────── */
 
+const MAX_TARGETS = 10;
+
 const state = {
-  target: localStorage.getItem("lw-target") || "",
+  raw: localStorage.getItem("lw-target") || "",
   token: localStorage.getItem("lw-token") || "",
   muted: new Set(JSON.parse(localStorage.getItem("lw-muted") || "[]")),
-  etag: null,
-  pollMs: 15000,
-  pollAt: 0,            // epoch ms of the next poll
-  pollTimer: null,
+  targets: [],          // { path, label, etag, pollMs, timer, at, dead }
+  limitUntil: 0,        // epoch ms the account-wide rate limit lifts
   paused: false,
   buffer: [],
   seen: new Set(),
@@ -77,6 +77,7 @@ const els = {
   totalCount: $("totalCount"), rateCount: $("rateCount"),
   statuschip: $("statuschip"), statusword: $("statusword"),
   pollReadout: $("pollReadout"), limitReadout: $("limitReadout"),
+  watchSummary: $("watchSummary"),
   targetInput: $("targetInput"), tokenInput: $("tokenInput"),
   pauseBtn: $("pauseBtn"), scope: $("scope"),
 };
@@ -85,89 +86,123 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /* ── target parsing ────────────────────────────────────────────────── */
 
-function endpointFor(raw) {
-  const t = raw.trim().replace(/^github\.com\//, "");
-  if (!t || t === "global") return { path: "/events", label: "the global firehose" };
-  if (t.startsWith("org:")) {
-    const org = t.slice(4).trim();
-    return { path: `/orgs/${org}/events`, label: `org ${org}` };
+/* The watch box takes a list — "torvalds mozilla/firefox org:nasa" —
+ * separated by spaces or commas. Empty means idle: no polling at all. */
+function parseTargets(raw) {
+  const paths = new Set();
+  const out = [];
+  for (const word of raw.trim().split(/[,\s]+/)) {
+    if (!word) continue;
+    const t = word.replace(/^github\.com\//, "").replace(/^@/, "");
+    let target;
+    if (t === "global") target = { path: "/events", label: "the firehose" };
+    else if (t.startsWith("org:")) target = { path: `/orgs/${t.slice(4)}/events`, label: `org ${t.slice(4)}` };
+    else if (t.includes("/")) target = { path: `/repos/${t}/events`, label: t };
+    else target = { path: `/users/${t}/events`, label: `@${t}` };
+    if (paths.has(target.path)) continue;
+    paths.add(target.path);
+    out.push({ ...target, etag: null, pollMs: 60000, timer: null, at: 0, dead: false });
   }
-  if (t.includes("/")) return { path: `/repos/${t}/events`, label: t };
-  return { path: `/users/${t}/events`, label: `@${t}` };
+  return out.slice(0, MAX_TARGETS);
 }
 
-/* ── polling ───────────────────────────────────────────────────────── */
+const liveTargets = () => state.targets.filter(t => !t.dead);
 
-async function poll() {
-  clearTimeout(state.pollTimer);
-  setStatus(state.paused ? "paused" : "sync", state.paused ? "paused" : "sync");
+/* ── polling — one independent loop per target ─────────────────────── */
 
-  const { path } = endpointFor(state.target);
+async function pollTarget(t) {
+  clearTimeout(t.timer);
+
+  // The rate limit is account-wide, so one 403 grounds every loop.
+  if (state.limitUntil > Date.now()) {
+    scheduleTarget(t, state.limitUntil - Date.now() + 1000);
+    return;
+  }
+
   const headers = { Accept: "application/vnd.github+json" };
-  if (state.etag) headers["If-None-Match"] = state.etag;
+  if (t.etag) headers["If-None-Match"] = t.etag;
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
 
   let res;
   try {
-    res = await fetch(`${API}${path}?per_page=100`, { headers });
+    res = await fetch(`${API}${t.path}?per_page=100`, { headers });
   } catch {
     setStatus("error", "offline");
-    schedule(30000);
+    scheduleTarget(t, 30000);
     return;
   }
 
   readRateLimit(res);
 
   if (res.status === 304) {
-    setStatus(state.paused ? "paused" : "live", state.paused ? "paused" : "live");
-    schedule(state.pollMs);
+    steadyStatus();
+    scheduleTarget(t, intervalFor(t));
     return;
   }
 
   if (res.status === 403 || res.status === 429) {
     const reset = Number(res.headers.get("x-ratelimit-reset")) * 1000;
     const wait = Math.max(30000, (reset || Date.now() + 60000) - Date.now() + 2000);
+    state.limitUntil = Date.now() + wait;
     setStatus("limit", "rate-limited");
-    showEmptyError(`rate limit reached — resuming ${new Date(Date.now() + wait).toLocaleTimeString()}`,
+    showEmptyError(`rate limit reached — resuming ${new Date(state.limitUntil).toLocaleTimeString()}`,
       "add a token below to raise the ceiling");
-    schedule(wait);
+    scheduleTarget(t, wait);
     return;
   }
 
   if (res.status === 404) {
-    setStatus("error", "not found");
-    showEmptyError(`nothing at "${state.target.trim()}"`, "check the handle — user, owner/repo, or org:name");
-    schedule(120000);
+    t.dead = true;
+    setStatus("error", `${t.label} not found`);
+    updateWatchSummary();
+    if (liveTargets().length === 0) {
+      showEmptyError("nothing found to watch", "check the handles — user · owner/repo · org:name");
+    }
     return;
   }
 
   if (!res.ok) {
     setStatus("error", `http ${res.status}`);
-    schedule(60000);
+    scheduleTarget(t, 60000);
     return;
   }
 
-  state.etag = res.headers.get("etag");
-  const wanted = Math.max(10, Number(res.headers.get("x-poll-interval") || 0));
-  // Without a token the budget is 60 requests/hour; don't spend it faster
-  // than one a minute no matter what the header offers.
-  state.pollMs = Math.max(wanted, state.token ? 10 : 60) * 1000;
+  t.etag = res.headers.get("etag");
+  t.pollMs = Math.max(10, Number(res.headers.get("x-poll-interval") || 0)) * 1000;
 
   let events;
   try { events = await res.json(); } catch { events = []; }
 
   // Schedule before ingesting so the trickle paces itself against the real
   // window until the next poll, not a stale timestamp.
-  schedule(state.pollMs);
+  scheduleTarget(t, intervalFor(t));
   if (Array.isArray(events)) ingest(events);
 
-  setStatus(state.paused ? "paused" : "live", state.paused ? "paused" : "live");
+  steadyStatus();
 }
 
-function schedule(ms) {
-  state.pollAt = Date.now() + ms;
-  clearTimeout(state.pollTimer);
-  state.pollTimer = setTimeout(poll, ms);
+/* Without a token the budget is 60 requests/hour for the whole account,
+ * so it's split across however many targets are being watched. 304s are
+ * free, but there's no knowing in advance which polls will come back 304. */
+function intervalFor(t) {
+  const n = Math.max(1, liveTargets().length);
+  const floor = state.token ? 10 : 60 * n;
+  return Math.max(t.pollMs, floor * 1000);
+}
+
+function scheduleTarget(t, ms) {
+  t.at = Date.now() + ms;
+  clearTimeout(t.timer);
+  t.timer = setTimeout(() => pollTarget(t), ms);
+}
+
+function nextPollAt() {
+  const upcoming = liveTargets().map(t => t.at).filter(at => at > Date.now());
+  return upcoming.length ? Math.min(...upcoming) : 0;
+}
+
+function steadyStatus() {
+  setStatus(state.paused ? "paused" : "live", state.paused ? "paused" : "live");
 }
 
 function readRateLimit(res) {
@@ -205,7 +240,7 @@ function runTrickle() {
 
   // Pace the queue to drain shortly before the next poll; the opening batch
   // pours faster so the board fills while the room is still being warmed up.
-  const runway = Math.max(2000, state.pollAt - Date.now() - 3000);
+  const runway = Math.max(2000, nextPollAt() - Date.now() - 3000);
   let gap = Math.min(2500, Math.max(120, runway / state.buffer.length));
   if (state.firstBatch) gap = 60;
   if (reducedMotion) gap = Math.min(gap, 200);
@@ -484,11 +519,22 @@ function showEmptyError(msg, sub) {
 }
 
 setInterval(() => {
-  if (!state.pollAt) return;
-  const s = Math.max(0, Math.round((state.pollAt - Date.now()) / 1000));
-  els.pollReadout.textContent = `next poll ${s}s`;
+  const at = nextPollAt();
+  if (at) {
+    const s = Math.max(0, Math.round((at - Date.now()) / 1000));
+    els.pollReadout.textContent = `next poll ${s}s`;
+  } else {
+    els.pollReadout.textContent = "polling off";
+  }
   renderTotals();
 }, 1000);
+
+function updateWatchSummary() {
+  const live = liveTargets();
+  els.watchSummary.textContent = live.length
+    ? `watching ${live.map(t => t.label).join(" · ")}`
+    : "off the air";
+}
 
 /* ── the seismograph ───────────────────────────────────────────────── */
 
@@ -591,22 +637,39 @@ function scopePulse(channel) { scope.pulse(channel); }
 /* ── controls ──────────────────────────────────────────────────────── */
 
 function retune() {
-  state.etag = null;
+  for (const t of state.targets) clearTimeout(t.timer);
+  state.targets = parseTargets(state.raw);
   state.buffer.length = 0;
   state.firstBatch = true;
   els.wire.replaceChildren();
   els.wireEmpty.hidden = false;
   els.wireEmpty.classList.remove("is-error");
-  const { label } = endpointFor(state.target);
-  els.wireEmpty.children[0].textContent = `tuning in to ${label}…`;
+  updateWatchSummary();
+
+  if (state.targets.length === 0) {
+    setStatus("idle", "idle");
+    els.wireEmpty.children[0].textContent = "not watching anything yet";
+    els.wireEmpty.children[1].textContent = "type who to watch below — a user, owner/repo, org:name, or global";
+    return;
+  }
+
+  els.wireEmpty.children[0].textContent = state.targets.length === 1
+    ? `tuning in to ${state.targets[0].label}…`
+    : `tuning in to ${state.targets.length} stations…`;
   els.wireEmpty.children[1].textContent = "first events land after the opening poll";
-  poll();
+  // Stagger the opening polls so a long watch list doesn't burst.
+  state.targets.forEach((t, i) => scheduleTarget(t, 300 + i * 1200));
 }
 
-els.targetInput.value = state.target;
+// A ?watch= URL parameter overrides the saved list for this visit only,
+// so a watch list can be shared as a link.
+const urlWatch = new URLSearchParams(location.search).get("watch");
+if (urlWatch !== null) state.raw = urlWatch;
+
+els.targetInput.value = state.raw;
 els.targetInput.addEventListener("change", () => {
-  state.target = els.targetInput.value;
-  localStorage.setItem("lw-target", state.target);
+  state.raw = els.targetInput.value;
+  localStorage.setItem("lw-target", state.raw);
   retune();
 });
 
@@ -621,7 +684,8 @@ function setPaused(on) {
   state.paused = on;
   els.pauseBtn.setAttribute("aria-pressed", String(on));
   els.pauseBtn.textContent = on ? "resume" : "pause";
-  setStatus(on ? "paused" : "live", on ? "paused" : "live");
+  if (liveTargets().length === 0) setStatus("idle", "idle");
+  else steadyStatus();
   if (!on) runTrickle();
 }
 
@@ -639,4 +703,4 @@ addEventListener("keydown", e => {
 buildLedger();
 renderBoards();
 scope.start();
-poll();
+retune();

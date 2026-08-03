@@ -184,6 +184,16 @@ a:hover { text-decoration: underline; text-decoration-color: var(--muted); }
   transition: opacity 0.2s;
 }
 
+.tile-label-note {
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--faint);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tile--ledger:hover .tile-label-hint { opacity: 1; }
 
 /* ── ledger: channel counters that double as filters ───────────────── */

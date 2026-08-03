@@ -33,10 +33,10 @@
   </section>
 
   <section class="tile tile--wire" aria-label="Live event feed">
-    <h2 class="engraving tile-label">the wire</h2>
+    <h2 class="engraving tile-label">the wire <span class="tile-label-note" id="watchSummary">off the air</span></h2>
     <div class="wire-empty" id="wireEmpty">
-      <p>tuning in to the firehose…</p>
-      <p class="wire-empty-sub">first events land after the opening poll</p>
+      <p>not watching anything yet</p>
+      <p class="wire-empty-sub">type who to watch below — a user, owner/repo, org:name, or global</p>
     </div>
     <ol class="wire" id="wire"></ol>
   </section>
@@ -54,7 +54,7 @@
   <label class="deskfield">
     <span class="engraving">watch</span>
     <input id="targetInput" type="text" spellcheck="false" autocomplete="off"
-           placeholder="global · user · owner/repo" title="What to watch. Empty = the global firehose. Also takes org:name.">
+           placeholder="torvalds gaearon rust-lang/rust" title="Who to watch — users, owner/repo, org:name, or global, separated by spaces or commas. Empty = off.">
   </label>
   <label class="deskfield">
     <span class="engraving">token</span>
