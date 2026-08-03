@@ -58,7 +58,9 @@ with:
 ./install.sh
 ```
 
-(needs Rust and `webkit2gtk-4.1`). The build stamps the commit it was made
+(needs Rust and `webkit2gtk-4.1`), or grab the **AppImage** from the
+[latest release](https://github.com/pl0xuee/github-livewire/releases) —
+CI builds one for every version tag. The build stamps the commit it was made
 from into the page; the app periodically asks GitHub how far `origin/main`
 has moved on and, when it has, lights a green **update** chip in the header —
 click it to see what's new and update in place (`livewire-update.sh` pulls,
