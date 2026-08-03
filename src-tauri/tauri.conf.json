@@ -4,7 +4,8 @@
   "version": "0.3.0",
   "identifier": "dev.pl0xuee.livewire",
   "build": {
-    "frontendDist": "dist"
+    "frontendDist": "dist",
+    "beforeBuildCommand": "mkdir -p dist && cp ../index.html ../style.css ../app.js dist/"
   },
   "app": {
     "withGlobalTauri": true,
