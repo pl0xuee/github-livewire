@@ -127,6 +127,17 @@ function parseTargets(raw) {
 
 const liveTargets = () => state.targets.filter(t => !t.dead);
 
+/* Every API request goes through here, and only here attaches the token —
+ * structurally, the token cannot travel anywhere but api.github.com. It is
+ * also never acquired by the app on its own: it exists only after the user
+ * pastes one or presses "use gh" on their own machine (the hosted web page
+ * has no gh access at all). */
+function apiFetch(path, headers = {}) {
+  const h = { Accept: "application/vnd.github+json", ...headers };
+  if (state.token) h.Authorization = `Bearer ${state.token}`;
+  return fetch(`${API}${path}`, { headers: h });
+}
+
 /* ── polling — one independent loop per target ─────────────────────── */
 
 async function pollTarget(t) {
@@ -138,13 +149,9 @@ async function pollTarget(t) {
     return;
   }
 
-  const headers = { Accept: "application/vnd.github+json" };
-  if (t.etag) headers["If-None-Match"] = t.etag;
-  if (state.token) headers.Authorization = `Bearer ${state.token}`;
-
   let res;
   try {
-    res = await fetch(`${API}${t.path}?per_page=100`, { headers });
+    res = await apiFetch(`${t.path}?per_page=100`, t.etag ? { "If-None-Match": t.etag } : {});
   } catch {
     setStatus("error", "offline");
     scheduleTarget(t, 30000);
@@ -852,7 +859,7 @@ if (IS_APP) {
     localStorage.setItem("lw-use-gh", "1");
     ghLinked(tok);
     try {
-      const res = await fetch(`${API}/user`, { headers: { Authorization: `Bearer ${tok}` } });
+      const res = await apiFetch("/user");
       if (res.ok) {
         const me = await res.json();
         const circle = `follows:${me.login}`;
@@ -878,9 +885,7 @@ async function checkForUpdate() {
   if (!IS_APP || !BUILT_COMMIT) return;
   let d;
   try {
-    const headers = { Accept: "application/vnd.github+json" };
-    if (state.token) headers.Authorization = `Bearer ${state.token}`;
-    const res = await fetch(`${API}/repos/${SELF_REPO}/compare/${BUILT_COMMIT}...main`, { headers });
+    const res = await apiFetch(`/repos/${SELF_REPO}/compare/${BUILT_COMMIT}...main`);
     if (!res.ok) return;
     d = await res.json();
   } catch { return; }

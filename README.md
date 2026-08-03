@@ -75,6 +75,13 @@ In the desktop app there's a faster road: the **use gh** button borrows the
 `gh` CLI's existing login for the session — 5,000/hour, nothing new written
 to disk — and tunes in your own circle (`follows:you`) automatically.
 
+**Where tokens can and can't go:** livewire never acquires a token by
+itself. One exists only after you paste one or press **use gh** on your own
+machine, it is attached by a single code path that talks exclusively to
+`api.github.com`, and a gh-borrowed token is held in memory only — `gh`
+stays its keeper on disk. The hosted web page has no gh access at all; the
+button doesn't exist there.
+
 ## Palette
 
 The gunmetal ramp, filament light, and channel hues are borrowed from
