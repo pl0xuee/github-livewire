@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>livewire — github telemetry</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231a232a'/%3E%3Cpath d='M2 10h3l1.5-5 2 7 1.5-4h4' stroke='%23f2e7d3' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="rackbar">
+  <div class="masthead">
+    <h1>livewire</h1>
+    <p class="engraving">github telemetry</p>
+  </div>
+  <canvas id="scope" class="scope" aria-hidden="true"></canvas>
+  <div class="statuschip" id="statuschip" data-state="sync">
+    <span class="lamp" aria-hidden="true"></span>
+    <span class="statuschip-word" id="statusword">tuning</span>
+  </div>
+</header>
+
+<main class="rack">
+
+  <section class="tile tile--ledger" aria-label="Event ledger">
+    <h2 class="engraving tile-label">ledger <span class="tile-label-hint">click a channel to mute it</span></h2>
+    <ul class="ledger" id="ledger"></ul>
+    <div class="ledger-totals">
+      <div class="totalrow"><span class="engraving">events</span><output id="totalCount">0</output></div>
+      <div class="totalrow"><span class="engraving">per min</span><output id="rateCount">0</output></div>
+    </div>
+  </section>
+
+  <section class="tile tile--wire" aria-label="Live event feed">
+    <h2 class="engraving tile-label">the wire</h2>
+    <div class="wire-empty" id="wireEmpty">
+      <p>tuning in to the firehose…</p>
+      <p class="wire-empty-sub">first events land after the opening poll</p>
+    </div>
+    <ol class="wire" id="wire"></ol>
+  </section>
+
+  <section class="tile tile--board" aria-label="Session leaderboards">
+    <h2 class="engraving tile-label">hot repos</h2>
+    <ol class="board" id="hotRepos"></ol>
+    <h2 class="engraving tile-label">busy hands</h2>
+    <ol class="board board--actors" id="hotActors"></ol>
+  </section>
+
+</main>
+
+<footer class="deskbar">
+  <label class="deskfield">
+    <span class="engraving">watch</span>
+    <input id="targetInput" type="text" spellcheck="false" autocomplete="off"
+           placeholder="global · user · owner/repo" title="What to watch. Empty = the global firehose. Also takes org:name.">
+  </label>
+  <label class="deskfield">
+    <span class="engraving">token</span>
+    <input id="tokenInput" type="password" spellcheck="false" autocomplete="off"
+           placeholder="optional — faster polls" title="A GitHub personal access token raises the API rate limit. Stored only in this browser.">
+  </label>
+  <button id="pauseBtn" class="deskbtn" type="button" aria-pressed="false" title="Pause the wire (space)">pause</button>
+  <div class="desktelemetry">
+    <span id="pollReadout" class="engraving">next poll —</span>
+    <span id="limitReadout" class="engraving">api —</span>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
