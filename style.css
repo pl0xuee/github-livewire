@@ -118,6 +118,30 @@ a:hover { text-decoration: underline; text-decoration-color: var(--muted); }
   border-radius: 3px;
 }
 
+/* the service lamp — is GitHub itself up? */
+.ghstatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: var(--chip);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.ghstatus:hover { background: var(--hairline); text-decoration: none; }
+.ghstatus[data-state="up"]      .lamp { background: var(--fresh); }
+.ghstatus[data-state="minor"]   .lamp { background: var(--tally); }
+.ghstatus[data-state="minor"]   { color: var(--tally); }
+.ghstatus[data-state="down"]    .lamp { background: var(--hangup); animation: lamp-pulse 1.2s ease-in-out infinite; }
+.ghstatus[data-state="down"]    { color: var(--hangup); border-color: var(--hangup); }
+.ghstatus[data-state="unknown"] .lamp { background: var(--muted); }
+
 /* the fresh lamp — an update is available (same meaning as agenttilecli) */
 .updatechip {
   display: flex;
@@ -639,6 +663,41 @@ a:hover { text-decoration: underline; text-decoration-color: var(--muted); }
 .updatedialog li::before { content: "+ "; color: var(--fresh); }
 
 .updatedialog-actions { display: flex; gap: 10px; }
+
+a.deskbtn { display: inline-flex; align-items: center; text-decoration: none; }
+a.deskbtn:hover { text-decoration: none; }
+
+/* the service board — per-component lamps and live incidents */
+.statusboard { max-width: 480px; width: min(480px, 92vw); }
+
+.statuscomponents li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 3px 0;
+  color: var(--dim);
+}
+
+.statuscomponents li::before { content: none; }
+
+.statuscomponents .lamp { background: var(--muted); }
+.statuscomponents li[data-state="operational"] .lamp { background: var(--fresh); }
+.statuscomponents li[data-state="degraded_performance"] .lamp,
+.statuscomponents li[data-state="partial_outage"] .lamp { background: var(--tally); }
+.statuscomponents li[data-state="major_outage"] .lamp { background: var(--hangup); }
+
+.statuscomponent-word { color: var(--faint); font-size: 11px; }
+.statuscomponents li[data-state="degraded_performance"] .statuscomponent-word,
+.statuscomponents li[data-state="partial_outage"] .statuscomponent-word { color: var(--tally); }
+.statuscomponents li[data-state="major_outage"] .statuscomponent-word { color: var(--hangup); }
+
+.statusincident { margin: 10px 0; }
+.statusincident a { color: var(--text); }
+.statusincident-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.statusincident-meta .is-critical { color: var(--hangup); }
+.statusincident-meta .is-minor { color: var(--tally); }
+.statusquiet { color: var(--faint); font-size: 11px; margin: 10px 0; }
 
 .deskbtn--primary {
   background: var(--filament);

@@ -85,6 +85,10 @@ const els = {
   updateDialog: $("updateDialog"), updateSummary: $("updateSummary"),
   updateSubjects: $("updateSubjects"), updateNow: $("updateNow"),
   updateLater: $("updateLater"),
+  ghStatus: $("ghStatus"), ghStatusWord: $("ghStatusWord"),
+  statusDialog: $("statusDialog"), statusOverall: $("statusOverall"),
+  statusComponents: $("statusComponents"), statusIncidents: $("statusIncidents"),
+  statusClose: $("statusClose"),
 };
 
 /* Running inside the Tauri shell? Then links open in the system browser and
@@ -924,6 +928,86 @@ els.updateNow.addEventListener("click", () => {
 if (BUILT_COMMIT) els.revReadout.textContent = `rev ${BUILT_COMMIT.slice(0, 7)}`;
 setTimeout(checkForUpdate, 8000);
 setInterval(checkForUpdate, 6 * 3600 * 1000);
+
+/* ── is github itself up? ──────────────────────────────────────────────
+ * Statuspage feed, not the API — different host, so it deliberately does
+ * NOT go through apiFetch and never sees the token. It also doesn't count
+ * against any rate limit, so a tight cadence is fine. One summary fetch
+ * carries the headline, every component's health, and active incidents. */
+
+async function checkGithubStatus() {
+  let d = null;
+  try {
+    const res = await fetch("https://www.githubstatus.com/api/v2/summary.json");
+    d = await res.json();
+  } catch { /* unreachable — could be them or us, so claim nothing */ }
+
+  const map = {
+    none: ["up", "github up"],
+    minor: ["minor", "github degraded"],
+    major: ["down", "github down"],
+    critical: ["down", "github down"],
+  };
+  const [stateName, word] = map[d?.status?.indicator] || ["unknown", "github ?"];
+  els.ghStatus.dataset.state = stateName;
+  els.ghStatusWord.textContent = word;
+  els.ghStatus.title = d?.status?.description
+    ? `${d.status.description} — click for the service board`
+    : "GitHub service status — click for the service board";
+  els.statusOverall.textContent = d?.status?.description || "status feed unreachable";
+
+  // Component lamps, minus Statuspage's self-promotional pseudo-component.
+  els.statusComponents.replaceChildren();
+  for (const c of (d?.components || []).filter(c => !/visit .*status/i.test(c.name || ""))) {
+    const li = document.createElement("li");
+    li.dataset.state = c.status || "unknown";
+    const lamp = document.createElement("span");
+    lamp.className = "lamp";
+    const name = document.createElement("span");
+    name.textContent = c.name || "";
+    const status = document.createElement("span");
+    status.className = "statuscomponent-word";
+    status.textContent = (c.status || "unknown").replace(/_/g, " ");
+    li.append(lamp, name, status);
+    els.statusComponents.append(li);
+  }
+
+  // Active incidents, newest first, straight from the feed.
+  els.statusIncidents.replaceChildren();
+  const incidents = d?.incidents || [];
+  if (d && incidents.length === 0) {
+    const p = document.createElement("p");
+    p.className = "statusquiet";
+    p.textContent = "no active incidents";
+    els.statusIncidents.append(p);
+  }
+  for (const inc of incidents.slice(0, 5)) {
+    const div = document.createElement("div");
+    div.className = "statusincident";
+    const a = document.createElement("a");
+    a.href = inc.shortlink || "https://www.githubstatus.com";
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = inc.name || "incident";
+    const meta = document.createElement("div");
+    meta.className = "statusincident-meta";
+    const impact = document.createElement("span");
+    impact.className = inc.impact === "critical" || inc.impact === "major" ? "is-critical" : "is-minor";
+    impact.textContent = inc.impact || "unknown";
+    meta.append(impact, document.createTextNode(
+      ` · ${inc.status || ""} · ${inc.updated_at ? new Date(inc.updated_at).toLocaleString() : ""}`));
+    div.append(a, meta);
+    els.statusIncidents.append(div);
+  }
+}
+
+els.ghStatus.addEventListener("click", () => els.statusDialog.showModal());
+els.statusClose.addEventListener("click", () => els.statusDialog.close());
+
+checkGithubStatus().then(() => {
+  if (location.hash === "#status") els.statusDialog.showModal();
+});
+setInterval(checkGithubStatus, 180000);
 
 /* ── go ────────────────────────────────────────────────────────────── */
 

@@ -29,6 +29,10 @@ releases, pull requests, issues and more, streaming in as they happen.
 - **Your circle** — `follows:you` watches everyone a user follows through a
   single poll target (GitHub's received-events feed), instead of adding
   fifty chips one by one.
+- **Service lamp** — a **github up / degraded / down** chip in the header,
+  fed by githubstatus.com. Click it for the service board: per-component
+  health (Git, API, Actions, Pages, …) and active incidents, refreshed
+  every three minutes. Also reachable at `#status`.
 - Pause with the button or the space bar. Session totals and events/min in the
   ledger footer; API budget and next-poll countdown in the desk bar.
 

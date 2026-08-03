@@ -15,6 +15,11 @@
     <p class="engraving">github telemetry</p>
   </div>
   <canvas id="scope" class="scope" aria-hidden="true"></canvas>
+  <button id="ghStatus" class="ghstatus" data-state="unknown" type="button"
+          title="GitHub service status — click for the service board">
+    <span class="lamp" aria-hidden="true"></span>
+    <span id="ghStatusWord">github</span>
+  </button>
   <button id="updateChip" class="updatechip" type="button" hidden
           title="A newer livewire is on origin/main">
     <span class="lamp" aria-hidden="true"></span>
@@ -78,6 +83,17 @@
     <span id="revReadout" class="engraving"></span>
   </div>
 </footer>
+
+<dialog id="statusDialog" class="updatedialog statusboard">
+  <h2 class="engraving">github service board</h2>
+  <p id="statusOverall">checking…</p>
+  <ul id="statusComponents" class="statuscomponents"></ul>
+  <div id="statusIncidents"></div>
+  <div class="updatedialog-actions">
+    <a class="deskbtn" href="https://www.githubstatus.com" target="_blank" rel="noopener">githubstatus.com</a>
+    <button id="statusClose" class="deskbtn" type="button">close</button>
+  </div>
+</dialog>
 
 <dialog id="updateDialog" class="updatedialog">
   <h2 class="engraving">update ready</h2>
