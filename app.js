@@ -80,7 +80,7 @@ const els = {
   watchSummary: $("watchSummary"), watchBox: $("watchBox"),
   targetInput: $("targetInput"), tokenInput: $("tokenInput"),
   pauseBtn: $("pauseBtn"), scope: $("scope"),
-  revReadout: $("revReadout"),
+  ghBtn: $("ghBtn"), revReadout: $("revReadout"),
   updateChip: $("updateChip"), updateWord: $("updateWord"),
   updateDialog: $("updateDialog"), updateSummary: $("updateSummary"),
   updateSubjects: $("updateSubjects"), updateNow: $("updateNow"),
@@ -108,7 +108,13 @@ function parseTargets(raw) {
     if (!word) continue;
     const t = word.replace(/^github\.com\//, "").replace(/^@/, "");
     let target;
+    const follows = t.match(/^(?:feed|follows):(.+)$/);
     if (t === "global") target = { path: "/events", label: "the firehose" };
+    else if (follows) {
+      // received_events is the feed of everyone this user follows — the
+      // whole circle in a single poll target.
+      target = { path: `/users/${follows[1]}/received_events`, label: `${follows[1]}'s circle` };
+    }
     else if (t.startsWith("org:")) target = { path: `/orgs/${t.slice(4)}/events`, label: `org ${t.slice(4)}` };
     else if (t.includes("/")) target = { path: `/repos/${t}/events`, label: t };
     else target = { path: `/users/${t}/events`, label: `@${t}` };
@@ -194,12 +200,15 @@ async function pollTarget(t) {
   steadyStatus();
 }
 
-/* Without a token the budget is 60 requests/hour for the whole account,
- * so it's split across however many targets are being watched. 304s are
- * free, but there's no knowing in advance which polls will come back 304. */
+/* The request budget — 60/hour anonymous, 5,000/hour with a token — is
+ * shared by the whole account, so it's split across however many targets
+ * are being watched (with headroom kept for avatars and the update check).
+ * 304s are free, but there's no knowing in advance which polls will 304. */
 function intervalFor(t) {
   const n = Math.max(1, liveTargets().length);
-  const floor = state.token ? 10 : 60 * n;
+  const floor = state.token
+    ? Math.max(10, Math.ceil((n * 3600) / 4500))
+    : 60 * n;
   return Math.max(t.pollMs, floor * 1000);
 }
 
@@ -772,12 +781,20 @@ els.targetInput.addEventListener("change", () => {
   }
 });
 
+function adoptToken(tok, persist) {
+  state.token = tok;
+  if (persist) localStorage.setItem("lw-token", tok);
+  else localStorage.removeItem("lw-token");
+  // The token changes the polling budget — bring every station's next poll in.
+  liveTargets().forEach((t, i) => scheduleTarget(t, 500 + i * 600));
+}
+
 els.tokenInput.value = state.token;
 els.tokenInput.addEventListener("change", () => {
-  state.token = els.tokenInput.value.trim();
-  localStorage.setItem("lw-token", state.token);
-  // A token changes the polling budget — bring every station's next poll in.
-  liveTargets().forEach((t, i) => scheduleTarget(t, 500 + i * 600));
+  localStorage.removeItem("lw-use-gh");
+  els.ghBtn.textContent = "use gh";
+  els.tokenInput.placeholder = "optional — faster polls";
+  adoptToken(els.tokenInput.value.trim(), true);
 });
 
 function setPaused(on) {
@@ -809,6 +826,46 @@ if (IS_APP) {
     window.__TAURI__.core.invoke("open_external", { url: a.href })
       .catch(() => window.open(a.href));
   });
+
+  /* "use gh": borrow the gh CLI's login for the 5,000/hour budget. The
+   * token lives only in memory here — gh stays its keeper on disk — and
+   * linking tunes in your own circle (the people you follow) if it isn't
+   * already on the watch list. */
+  const ghLinked = tok => {
+    els.tokenInput.value = "";
+    els.tokenInput.placeholder = "using gh login";
+    els.ghBtn.textContent = "gh ✓";
+    adoptToken(tok, false);
+  };
+
+  els.ghBtn.hidden = false;
+  els.ghBtn.addEventListener("click", async () => {
+    let tok;
+    try {
+      tok = await window.__TAURI__.core.invoke("gh_token");
+    } catch (err) {
+      els.ghBtn.textContent = "gh ✗";
+      els.ghBtn.title = String(err);
+      setTimeout(() => { els.ghBtn.textContent = "use gh"; }, 4000);
+      return;
+    }
+    localStorage.setItem("lw-use-gh", "1");
+    ghLinked(tok);
+    try {
+      const res = await fetch(`${API}/user`, { headers: { Authorization: `Bearer ${tok}` } });
+      if (res.ok) {
+        const me = await res.json();
+        const circle = `follows:${me.login}`;
+        if (me.login && !getTokens().some(t => t.toLowerCase() === circle.toLowerCase())) {
+          addWatch(circle);
+        }
+      }
+    } catch { /* the login still counts even if the circle can't be fetched */ }
+  });
+
+  if (localStorage.getItem("lw-use-gh") === "1") {
+    window.__TAURI__.core.invoke("gh_token").then(ghLinked).catch(() => {});
+  }
 }
 
 /* Same contract as agenttilecli's updater: the binary knows the commit it

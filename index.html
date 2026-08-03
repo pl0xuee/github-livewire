@@ -61,7 +61,7 @@
     <div class="watchbox" id="watchBox">
       <input id="targetInput" type="text" spellcheck="false" autocomplete="off"
              placeholder="user · owner/repo · org:name · global"
-             title="Type who to watch and press Enter — users, owner/repo, org:name, or global. Each becomes a chip; × removes it.">
+             title="Type who to watch and press Enter — a user, owner/repo, org:name, global, or follows:user for everyone that user follows. Each becomes a chip; × removes it.">
     </div>
   </label>
   <label class="deskfield">
@@ -69,6 +69,8 @@
     <input id="tokenInput" type="password" spellcheck="false" autocomplete="off"
            placeholder="optional — faster polls" title="A GitHub personal access token raises the API rate limit. Stored only in this browser.">
   </label>
+  <button id="ghBtn" class="deskbtn" type="button" hidden
+          title="Borrow the gh CLI's login — 5,000 requests/hour, token never written to disk">use gh</button>
   <button id="pauseBtn" class="deskbtn" type="button" aria-pressed="false" title="Pause the wire (space)">pause</button>
   <div class="desktelemetry">
     <span id="pollReadout" class="engraving">next poll —</span>

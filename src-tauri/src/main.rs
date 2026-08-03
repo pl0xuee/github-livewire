@@ -19,6 +19,25 @@ fn open_external(url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Borrows the gh CLI's OAuth token, so the app can poll at the
+/// authenticated rate without carrying a login flow of its own. The token
+/// stays in memory on the JS side — gh remains its only keeper on disk.
+#[tauri::command]
+fn gh_token() -> Result<String, String> {
+    let out = Command::new("gh")
+        .args(["auth", "token"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err("gh isn't logged in".into());
+    }
+    let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if token.is_empty() {
+        return Err("gh returned no token".into());
+    }
+    Ok(token)
+}
+
 /// Hands off to livewire-update.sh in its own session, so the script
 /// survives this process being replaced by the build it kicks off.
 #[tauri::command]
@@ -34,7 +53,7 @@ fn run_update() -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![open_external, run_update])
+        .invoke_handler(tauri::generate_handler![open_external, run_update, gh_token])
         .run(tauri::generate_context!())
         .expect("livewire failed to start");
 }

@@ -26,6 +26,9 @@ releases, pull requests, issues and more, streaming in as they happen.
   watch. Each target gets its own poll loop and they merge onto one wire,
   deduplicated. A watch list is shareable as a link:
   `?watch=torvalds,rust-lang/rust`.
+- **Your circle** — `follows:you` watches everyone a user follows through a
+  single poll target (GitHub's received-events feed), instead of adding
+  fifty chips one by one.
 - Pause with the button or the space bar. Session totals and events/min in the
   ledger footer; API budget and next-poll countdown in the desk bar.
 
@@ -67,6 +70,10 @@ nothing). Drop a
 [personal access token](https://github.com/settings/tokens) (no scopes needed)
 into the token field for 5,000/hour and faster polls. The token is stored only
 in your browser's localStorage and sent only to `api.github.com`.
+
+In the desktop app there's a faster road: the **use gh** button borrows the
+`gh` CLI's existing login for the session — 5,000/hour, nothing new written
+to disk — and tunes in your own circle (`follows:you`) automatically.
 
 ## Palette
 
