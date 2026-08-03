@@ -3,6 +3,8 @@
 A live telemetry board for GitHub's public event stream — pushes, stars, forks,
 releases, pull requests, issues and more, streaming in as they happen.
 
+**Live at <https://pl0xuee.github.io/github-livewire/>**
+
 ![livewire screenshot](screenshot.png)
 
 ## What it does
