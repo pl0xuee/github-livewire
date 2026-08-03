@@ -13,6 +13,8 @@ mkdir -p "$HOME/.local/bin" \
 install -m755 src-tauri/target/release/livewire "$HOME/.local/bin/livewire"
 install -m644 assets/livewire.png "$HOME/.local/share/icons/hicolor/512x512/apps/livewire.png"
 
+# The desktop file's name must equal the window's Wayland app-id — KWin
+# reports it as plain "livewire" — or compositors show a generic icon.
 cat > "$HOME/.local/share/applications/livewire.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -27,5 +29,8 @@ EOF
 
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 gtk-update-icon-cache -q "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+# KDE keeps its own launcher/icon database; without this the new icon can
+# stay invisible until the next login.
+kbuildsycoca6 2>/dev/null || kbuildsycoca5 2>/dev/null || true
 
 printf '\n\033[1;32mInstalled.\033[0m livewire is in your app launcher, or run: livewire\n'

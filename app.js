@@ -170,6 +170,12 @@ async function pollTarget(t) {
     return;
   }
 
+  if (res.status === 401) {
+    setStatus("error", "bad token");
+    scheduleTarget(t, 120000);
+    return;
+  }
+
   if (res.status === 403 || res.status === 429) {
     const reset = Number(res.headers.get("x-ratelimit-reset")) * 1000;
     const wait = Math.max(30000, (reset || Date.now() + 60000) - Date.now() + 2000);
@@ -177,7 +183,9 @@ async function pollTarget(t) {
     setStatus("limit", "rate-limited");
     showEmptyError(`rate limit reached — resuming ${new Date(state.limitUntil).toLocaleTimeString()}`,
       "add a token below to raise the ceiling");
-    scheduleTarget(t, wait);
+    // Stagger the wake-ups so the whole watch list doesn't burst the
+    // moment the limit lifts.
+    scheduleTarget(t, wait + Math.max(0, state.targets.indexOf(t)) * 2000);
     return;
   }
 
@@ -224,6 +232,9 @@ function intervalFor(t) {
 }
 
 function scheduleTarget(t, ms) {
+  // A target removed while its fetch was in flight must not reschedule
+  // itself — that would leave an orphan polling forever off the books.
+  if (!state.targets.includes(t)) return;
   t.at = Date.now() + ms;
   clearTimeout(t.timer);
   t.timer = setTimeout(() => pollTarget(t), ms);
@@ -648,8 +659,12 @@ const scope = (() => {
 
   let raf = null;
   function loop() {
-    step();
-    draw();
+    // Nothing to draw while the canvas is hidden (narrow layouts) — but
+    // keep looping so the trace resumes when a resize brings it back.
+    if (w > 0) {
+      step();
+      draw();
+    }
     raf = requestAnimationFrame(loop);
   }
 
@@ -668,6 +683,7 @@ const scope = (() => {
   return {
     start,
     pulse(channel) {
+      if (w === 0) return;
       if (reducedMotion) {
         ticks.push({ x: ticks.length % Math.ceil(w / 2), channel });
         draw();

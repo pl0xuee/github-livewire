@@ -29,7 +29,16 @@ fn main() {
     };
     fs::write(dist.join("index.html"), stamped).expect("write dist/index.html");
     println!("cargo:rerun-if-changed=../index.html");
+    // HEAD only changes on branch switches; the branch's own ref file is
+    // what moves on every commit. Watching both keeps the stamped commit
+    // honest — without the second line a rebuild after `git pull` could
+    // bake the previous sha and immediately report itself out of date.
     println!("cargo:rerun-if-changed=../.git/HEAD");
+    if let Ok(head) = fs::read_to_string("../.git/HEAD") {
+        if let Some(r) = head.trim().strip_prefix("ref: ") {
+            println!("cargo:rerun-if-changed=../.git/{r}");
+        }
+    }
 
     tauri_build::build()
 }

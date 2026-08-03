@@ -1,10 +1,20 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::process::Command;
+use std::process::{Child, Command};
 
 /// The checkout this binary was built from, baked in at compile time — the
 /// updater always pulls the repo it actually came from.
 const REPO_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
+
+/// Waits on the child from a side thread so it gets reaped — a dropped
+/// `Child` is never waited on, and every un-waited child is a zombie until
+/// this process exits.
+fn reap(child: Child) {
+    std::thread::spawn(move || {
+        let mut child = child;
+        let _ = child.wait();
+    });
+}
 
 /// Links leave the webview through the system browser, nothing else.
 #[tauri::command]
@@ -15,7 +25,7 @@ fn open_external(url: String) -> Result<(), String> {
     Command::new("xdg-open")
         .arg(url)
         .spawn()
-        .map(|_| ())
+        .map(reap)
         .map_err(|e| e.to_string())
 }
 
@@ -47,7 +57,7 @@ fn run_update() -> Result<(), String> {
         .arg(format!("{REPO_DIR}/livewire-update.sh"))
         .current_dir(REPO_DIR)
         .spawn()
-        .map(|_| ())
+        .map(reap)
         .map_err(|e| e.to_string())
 }
 
