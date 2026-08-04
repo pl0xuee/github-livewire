@@ -45,14 +45,38 @@ jobs:
           NO_STRIP: "true"
         run: tauri build
 
+      - name: Drop the bundled Wayland libraries
+        # linuxdeploy packs the runner's libwayland-* into the AppImage.
+        # WebKit's web process renders with the *host's* Mesa, and on
+        # distros newer than the runner (Arch and friends) host Mesa needs
+        # symbols the stale bundled copy lacks — EGL init fails and the
+        # window comes up white. Every GTK-capable host ships libwayland,
+        # so the AppImage can simply defer to it.
+        env:
+          ARCH: x86_64
+        run: |
+          cd src-tauri/target/release/bundle/appimage
+          APP=$(basename *.AppImage)
+          ./"$APP" --appimage-extract
+          rm -f squashfs-root/usr/lib/libwayland-*
+          curl -fsSL -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          ./appimagetool --appimage-extract-and-run squashfs-root "$APP"
+          rm -rf squashfs-root appimagetool
+
       - name: Upload to the release
         if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ inputs.tag || github.ref_name }}"
+          # The fixed name is what the in-app updater fetches through
+          # releases/latest/download/, so it must exist on every release.
+          cp src-tauri/target/release/bundle/appimage/*.AppImage Livewire.AppImage
           gh release upload "$TAG" \
-            src-tauri/target/release/bundle/appimage/*.AppImage --clobber
+            src-tauri/target/release/bundle/appimage/*.AppImage \
+            Livewire.AppImage --clobber
 
       - name: Keep the AppImage as a workflow artifact
         uses: actions/upload-artifact@v7

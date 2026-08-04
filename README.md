@@ -61,10 +61,13 @@ with:
 (needs Rust and `webkit2gtk-4.1`), or grab the **AppImage** from the
 [latest release](https://github.com/pl0xuee/github-livewire/releases) —
 CI builds one for every version tag. The build stamps the commit it was made
-from into the page; the app periodically asks GitHub how far `origin/main`
-has moved on and, when it has, lights a green **update** chip in the header —
-click it to see what's new and update in place (`livewire-update.sh` pulls,
-rebuilds, reinstalls, and restarts). Links open in your system browser.
+from into the page; the app periodically asks GitHub how far its channel has
+moved on — `origin/main` for a repo build, the newest release tag for the
+AppImage — and updates itself when it has: the repo build pulls, rebuilds,
+reinstalls and restarts (`livewire-update.sh`); the AppImage downloads the
+new release build and relaunches. The green **update** chip in the header
+narrates, and clicking it shows what's new or retries an update that
+couldn't start on its own. Links open in your system browser.
 
 ## Rate limits
 

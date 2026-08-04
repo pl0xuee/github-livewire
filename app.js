@@ -895,17 +895,51 @@ if (IS_APP) {
   }
 }
 
-/* Same contract as agenttilecli's updater: the binary knows the commit it
- * was built from, asks how far origin/main has moved on, and offers the
- * pull-and-reinstall script. The web build has no baked commit and Pages
- * always serves main, so none of this runs in a plain browser. */
+/* Same contract as agenttilecli's updater, now hands-free: the binary
+ * knows the commit it was built from and asks how far its channel has
+ * moved on — origin/main for a repo build (which pulls and reinstalls via
+ * livewire-update.sh), the newest release tag for an AppImage (which
+ * downloads that build and swaps itself). The first sighting of a new
+ * target starts the update unprompted; the chip narrates, and the dialog
+ * stays as the manual path if a hands-free run couldn't start. The web
+ * build has no baked commit and Pages always serves main, so none of
+ * this runs in a plain browser. */
 const SELF_REPO = "pl0xuee/github-livewire";
 
+const updateChannel = IS_APP
+  ? window.__TAURI__.core.invoke("update_channel").catch(() => "repo")
+  : Promise.resolve("repo");
+let updating = false;
+
+async function startUpdate() {
+  await window.__TAURI__.core.invoke("run_update");
+  updating = true;
+  els.updateWord.textContent = "updating…";
+  els.updateSummary.textContent = (await updateChannel) === "appimage"
+    ? "livewire is fetching the latest release build and restarts itself when it lands"
+    : "updating — livewire rebuilds and restarts itself when it's done";
+  els.updateSubjects.replaceChildren();
+}
+
 async function checkForUpdate() {
-  if (!IS_APP || !BUILT_COMMIT) return;
+  if (!IS_APP || !BUILT_COMMIT || updating) return;
+  const channel = await updateChannel;
+
+  /* An AppImage can only ever become the newest release, so that tag is
+   * its yardstick; a repo build tracks main itself. */
+  let target = "main";
+  if (channel === "appimage") {
+    try {
+      const rel = await apiFetch(`/repos/${SELF_REPO}/releases/latest`);
+      if (!rel.ok) return;
+      target = (await rel.json()).tag_name;
+    } catch { return; }
+    if (!target) return;
+  }
+
   let d;
   try {
-    const res = await apiFetch(`/repos/${SELF_REPO}/compare/${BUILT_COMMIT}...main`);
+    const res = await apiFetch(`/repos/${SELF_REPO}/compare/${BUILT_COMMIT}...${target}`);
     if (!res.ok) return;
     d = await res.json();
   } catch { return; }
@@ -915,30 +949,37 @@ async function checkForUpdate() {
   els.updateWord.textContent = `update · ${n}`;
   els.updateChip.hidden = false;
   els.updateSummary.textContent =
-    `this build is ${n} commit${n === 1 ? "" : "s"} behind origin/main`;
+    `this build is ${n} commit${n === 1 ? "" : "s"} behind ${channel === "appimage" ? target : "origin/main"}`;
   els.updateSubjects.replaceChildren();
   for (const c of (d.commits || []).slice(-6).reverse()) {
     const li = document.createElement("li");
     li.textContent = (c.commit?.message || "").split("\n")[0];
     els.updateSubjects.append(li);
   }
+
+  /* Hands-free, but one try per target: a run that took replaces this
+   * build and the fresh binary compares clean, so reaching this line
+   * twice for one sha means the last try didn't land — leave the chip
+   * and dialog as the manual path instead of retrying forever. */
+  const sha = d.commits?.at(-1)?.sha || target;
+  if (localStorage.getItem("lw-auto-updated") !== sha) {
+    localStorage.setItem("lw-auto-updated", sha);
+    startUpdate().catch(() => {});
+  }
 }
 
 els.updateChip.addEventListener("click", () => els.updateDialog.showModal());
 els.updateLater.addEventListener("click", () => els.updateDialog.close());
-els.updateNow.addEventListener("click", () => {
+els.updateNow.addEventListener("click", async () => {
   els.updateNow.disabled = true;
-  window.__TAURI__.core.invoke("run_update")
-    .then(() => {
-      els.updateSummary.textContent =
-        "updating — livewire rebuilds and restarts itself when it's done";
-      els.updateSubjects.replaceChildren();
-    })
-    .catch(() => {
-      els.updateNow.disabled = false;
-      els.updateSummary.textContent =
-        "couldn't start the updater — run livewire-update.sh from the repo";
-    });
+  try {
+    await startUpdate();
+  } catch {
+    els.updateNow.disabled = false;
+    els.updateSummary.textContent = (await updateChannel) === "appimage"
+      ? "couldn't start the update — grab the newest AppImage from the releases page"
+      : "couldn't start the updater — run livewire-update.sh from the repo";
+  }
 });
 
 if (BUILT_COMMIT) els.revReadout.textContent = `rev ${BUILT_COMMIT.slice(0, 7)}`;
