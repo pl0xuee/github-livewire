@@ -92,9 +92,11 @@ const els = {
 };
 
 /* Running inside the Tauri shell? Then links open in the system browser and
- * the updater can actually run; in a plain browser both fall away. */
+ * the updater can actually run; in a plain browser both fall away. The
+ * commit stamp is read lazily so it never depends on where in the page
+ * the build injected its script tag. */
 const IS_APP = !!window.__TAURI__;
-const BUILT_COMMIT =
+const builtCommit = () =>
   typeof window.__LW_COMMIT === "string" && /^[0-9a-f]{40}$/.test(window.__LW_COMMIT)
     ? window.__LW_COMMIT
     : null;
@@ -929,7 +931,8 @@ async function startUpdate() {
 }
 
 async function checkForUpdate() {
-  if (!IS_APP || !BUILT_COMMIT || updating) return;
+  const commit = builtCommit();
+  if (!IS_APP || !commit || updating) return;
   const channel = await updateChannel;
 
   /* An AppImage can only ever become the newest release, so that tag is
@@ -946,7 +949,7 @@ async function checkForUpdate() {
 
   let d;
   try {
-    const res = await apiFetch(`/repos/${SELF_REPO}/compare/${BUILT_COMMIT}...${target}`);
+    const res = await apiFetch(`/repos/${SELF_REPO}/compare/${commit}...${target}`);
     if (!res.ok) return;
     d = await res.json();
   } catch { return; }
@@ -989,7 +992,10 @@ els.updateNow.addEventListener("click", async () => {
   }
 });
 
-if (BUILT_COMMIT) els.revReadout.textContent = `rev ${BUILT_COMMIT.slice(0, 7)}`;
+{
+  const commit = builtCommit();
+  if (commit) els.revReadout.textContent = `rev ${commit.slice(0, 7)}`;
+}
 setTimeout(checkForUpdate, 8000);
 setInterval(checkForUpdate, 6 * 3600 * 1000);
 
