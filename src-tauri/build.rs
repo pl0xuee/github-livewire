@@ -27,10 +27,13 @@ fn main() {
     }
 
     let html = fs::read_to_string("../index.html").expect("read ../index.html");
+    // The stamp must land BEFORE the app.js tag: synchronous scripts run
+    // in document order, so a stamp injected after it would be assigned
+    // only after app.js has already looked for it.
     let stamped = match built_commit() {
         Some(sha) => html.replace(
-            "</body>",
-            &format!("<script>window.__LW_COMMIT=\"{sha}\";</script>\n</body>"),
+            "<script src=\"app.js\">",
+            &format!("<script>window.__LW_COMMIT=\"{sha}\";</script>\n<script src=\"app.js\">"),
         ),
         None => html,
     };
