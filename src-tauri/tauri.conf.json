@@ -5,7 +5,7 @@
   "identifier": "dev.pl0xuee.livewire",
   "build": {
     "frontendDist": "dist",
-    "beforeBuildCommand": "mkdir -p dist && cp ../index.html ../style.css ../app.js dist/"
+    "beforeBuildCommand": "mkdir -p src-tauri/dist && cp index.html style.css app.js src-tauri/dist/"
   },
   "app": {
     "withGlobalTauri": true,
