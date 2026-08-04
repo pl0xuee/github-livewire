@@ -55,7 +55,7 @@ jobs:
             src-tauri/target/release/bundle/appimage/*.AppImage --clobber
 
       - name: Keep the AppImage as a workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: livewire-appimage
           path: src-tauri/target/release/bundle/appimage/*.AppImage
