@@ -101,6 +101,13 @@ const BUILT_COMMIT =
 
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/* Clock readouts follow the machine: the OS timezone decides where a
+ * moment lands, and the reading is 12-hour, lowercased like the rest of
+ * the board. */
+const fmtTime = d =>
+  d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true })
+    .toLowerCase();
+
 /* ── target parsing ────────────────────────────────────────────────── */
 
 /* The watch box takes a list — "torvalds mozilla/firefox org:nasa" —
@@ -181,7 +188,7 @@ async function pollTarget(t) {
     const wait = Math.max(30000, (reset || Date.now() + 60000) - Date.now() + 2000);
     state.limitUntil = Date.now() + wait;
     setStatus("limit", "rate-limited");
-    showEmptyError(`rate limit reached — resuming ${new Date(state.limitUntil).toLocaleTimeString()}`,
+    showEmptyError(`rate limit reached — resuming ${fmtTime(new Date(state.limitUntil))}`,
       "add a token below to raise the ceiling");
     // Stagger the wake-ups so the whole watch list doesn't burst the
     // moment the limit lifts.
@@ -456,7 +463,7 @@ function renderEvent(ev, channel) {
   time.className = "ev-time";
   const at = new Date(ev.created_at);
   time.dateTime = ev.created_at;
-  time.textContent = at.toLocaleTimeString([], { hour12: false });
+  time.textContent = fmtTime(at);
 
   li.append(rail, glyph, face, line1, line2, time);
   return li;

@@ -13,10 +13,17 @@ fn main() {
     let dist = Path::new("dist");
     fs::create_dir_all(dist).expect("create dist/");
 
+    // The tauri CLI's beforeBuildCommand clobbers dist/ with unstamped
+    // copies before cargo runs; when no tracked source changed, cargo
+    // would skip this script and embed the clobber — a build with no
+    // baked commit, which silently disarms the updater. Watching the
+    // dist copies themselves turns any clobber into a rerun and a fresh
+    // stamp, at the cost of running this (cheap) script every build.
     for name in ["style.css", "app.js"] {
         fs::copy(format!("../{name}"), dist.join(name))
             .unwrap_or_else(|e| panic!("copy ../{name} into dist/: {e}"));
         println!("cargo:rerun-if-changed=../{name}");
+        println!("cargo:rerun-if-changed=dist/{name}");
     }
 
     let html = fs::read_to_string("../index.html").expect("read ../index.html");
@@ -29,6 +36,7 @@ fn main() {
     };
     fs::write(dist.join("index.html"), stamped).expect("write dist/index.html");
     println!("cargo:rerun-if-changed=../index.html");
+    println!("cargo:rerun-if-changed=dist/index.html");
     // HEAD only changes on branch switches; the branch's own ref file is
     // what moves on every commit. Watching both keeps the stamped commit
     // honest — without the second line a rebuild after `git pull` could

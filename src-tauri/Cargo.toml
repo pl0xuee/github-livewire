@@ -1,6 +1,6 @@
 [package]
 name = "livewire"
-version = "0.3.1"
+version = "0.3.2"
 description = "Live telemetry board for GitHub's public event stream"
 license = "MIT"
 edition = "2021"
